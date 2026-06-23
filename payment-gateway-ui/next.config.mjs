@@ -6,6 +6,10 @@ const nextConfig = {
         source: '/api/:path*',
         destination: 'http://3.25.237.156/api/:path*',
       },
+      {
+        source: '/health',
+        destination: 'http://3.25.237.156/health',
+      }
     ]
   },
 }
