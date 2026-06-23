@@ -1,0 +1,10 @@
+# File: .gitignore
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+
+# Prisma generated client (regenerated via prisma generate)
+# Keep schema.prisma but ignore auto-generated files
+prisma/generated/

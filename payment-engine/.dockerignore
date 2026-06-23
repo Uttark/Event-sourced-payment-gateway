@@ -1,0 +1,29 @@
+# Dependencies — the builder stage installs these fresh inside the container.
+# Copying them from the host would be slower AND potentially wrong
+# (native binaries compiled for macOS won't run on Linux Alpine).
+node_modules
+
+# Compiled output — the builder stage produces this from scratch.
+dist
+
+# Environment files — secrets must NEVER be baked into a Docker image.
+# They are injected at runtime by docker-compose via env_file.
+.env
+.env.*
+.env.local
+
+# Git history is not needed to run the application.
+.git
+.gitignore
+
+# Local development files
+*.log
+npm-debug.log*
+
+# Editor config
+.vscode
+.idea
+
+# OS files
+.DS_Store
+Thumbs.db

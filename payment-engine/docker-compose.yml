@@ -1,0 +1,155 @@
+# docker-compose.yml
+#
+# Runs the full payment engine stack: 2 infrastructure services, 1 migration
+# runner, and 9 Node.js application processes.
+#
+# YAML ANCHOR PATTERN:
+#   `x-app-base` defines all configuration shared by the 9 Node services.
+#   Each service merges it in with `<<: *app-base` and only specifies what
+#   makes it different — usually just the `command`.
+#   Without this, we would repeat the same 18 lines nine times.
+
+# version: "3.9"
+
+# =============================================================================
+# Shared configuration anchor
+# =============================================================================
+# The `x-` prefix tells Docker Compose to treat this as an extension field
+# (not a service). It is ignored by Compose itself and only used here as a
+# YAML anchor for the nine Node services below.
+x-app-base: &app-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file:
+    - .env
+  environment:
+    DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/payment_engine"
+    DIRECT_URL: "postgresql://postgres:postgres@postgres:5432/payment_engine"
+    REDIS_URL:    "redis://redis:6379"
+    NODE_ENV:     "production"
+    ALLOWED_ORIGINS: "http://localhost:3001"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+# =============================================================================
+services:
+# =============================================================================
+
+  # ── Infrastructure ───────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB:       payment_engine
+    volumes:
+      # Named volume: data persists across `docker compose down` and restarts.
+      # Without this, every `docker compose down` would wipe the database.
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Exposed to the host so you can connect with pgAdmin or psql locally.
+      # In production, you would remove this and let only the app network access it.
+      - "5432:5432"
+    healthcheck:
+      # pg_isready exits 0 when the server is accepting connections.
+      # Docker waits for this to pass before marking the service as healthy.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d payment_engine"]
+      interval: 10s   # Check every 10 seconds
+      timeout: 5s     # Consider it failed if it takes longer than 5 seconds
+      retries: 5      # Mark as unhealthy after 5 consecutive failures
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6380:6379"
+    healthcheck:
+      # `redis-cli ping` returns "PONG" when Redis is ready.
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Database Migrations ──────────────────────────────────────────────────────
+  # This service runs ONCE, applies all pending Prisma migrations, then exits.
+  # `restart: no` is critical — we don't want migrations running on a loop.
+  # All Node services declare `migrate: condition: service_completed_successfully`
+  # so they don't start until this exits cleanly with code 0.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/payment_engine"
+      DIRECT_URL: "postgresql://postgres:postgres@postgres:5432/payment_engine"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: npx prisma db push --accept-data-loss
+    restart: "no"
+
+  # ── Node.js Application Services ─────────────────────────────────────────────
+  # Each service merges the shared anchor with `<<: *app-base` and specifies
+  # only its unique `command`. That is the only line that differs between them.
+
+  api:
+    <<: *app-base
+    ports:
+      # The only service exposed to the outside world.
+      # "3000:3000" maps host port 3000 to container port 3000.
+      # All other services communicate over the internal Docker network only.
+      - "3000:3000"
+    command: node dist/app.js
+
+  fraud-consumer:
+    <<: *app-base
+    command: node dist/consumers/fraud.consumer.js
+
+  ledger-consumer:
+    <<: *app-base
+    command: node dist/consumers/ledger.consumer.js
+
+  projection-consumer:
+    <<: *app-base
+    command: node dist/consumers/projection.consumer.js
+
+  webhook-consumer:
+    <<: *app-base
+    command: node dist/consumers/webhook.consumer.js
+
+  dlq-worker:
+    <<: *app-base
+    command: node dist/workers/dlq.worker.js
+
+  compensation-worker:
+    <<: *app-base
+    command: node dist/workers/compensation.worker.js
+
+  payout-cron:
+    <<: *app-base
+    command: node dist/modules/payout/payout.scheduler.js
+
+  reconciliation-cron:
+    <<: *app-base
+    command: node dist/workers/reconciliation.cron.js
+
+
+# =============================================================================
+# Named Volumes
+# =============================================================================
+# Declaring volumes here makes Docker manage them as first-class resources.
+# They survive `docker compose down` and can be inspected with `docker volume ls`.
+# Run `docker compose down -v` to also delete volumes (full wipe).
+volumes:
+  postgres_data:
+  redis_data:

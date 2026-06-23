@@ -1,0 +1,22 @@
+# Global ignores
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+
+# Frontend (Next.js) ignores
+payment-gateway-ui/.next/
+payment-gateway-ui/out/
+payment-gateway-ui/build/
+
+# Backend (Prisma/Node) ignores
+payment-engine/dist/
+payment-engine/prisma/generated/
+payment-engine/coverage/
+
+# IDE and OS files
+.vscode/
+.idea/
+Thumbs.db
