@@ -8,7 +8,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint" 
+    "lint": "next lint"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +20,7 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.1",
     "@types/node": "^25.9.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
